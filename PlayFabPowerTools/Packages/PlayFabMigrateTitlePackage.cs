@@ -17,19 +17,12 @@ namespace PlayFabPowerTools.Packages
     {
         private enum States
         {
-            Idle,
-            TitleData,
-            TitleInternalData,
-            CloudScript,
-            Files,
-            Currency,
-            Catalogs,
-            DropTables,
-            Stores,
-            Complete
+            Working,
+            Complete,
+            Failed
         }
 
-        private States _state = States.Idle;
+        private States _state = States.Working;
 
         private struct commandArgs
         {
@@ -57,6 +50,7 @@ namespace PlayFabPowerTools.Packages
 
         public bool SetState(string line)
         {
+            _state = States.Working;
             //Parse Command Line args
             _commandArgs = new commandArgs();
             // migrate T381 T390
@@ -65,7 +59,8 @@ namespace PlayFabPowerTools.Packages
             if (lineSplit.Count != 3)
             {
                 Console.WriteLine("usage migrate [From TitleId] [To TitleId]");
-                _state = States.Complete;
+
+                _state = States.Failed;
                 return false;
             }
             _commandArgs.FromTitleId = lineSplit[1];
@@ -74,17 +69,28 @@ namespace PlayFabPowerTools.Packages
             Console.WriteLine("Migration Started");
 
             Task.Run(async () => {
-                await MigrateTitleData(_commandArgs.FromTitleId, _commandArgs.ToTitleId);
-                await MigrateInternalTitleData(_commandArgs.FromTitleId, _commandArgs.ToTitleId);
-                await MigrateCurrencyAsync(_commandArgs.FromTitleId, _commandArgs.ToTitleId);
-                await MigrateCloudScriptAsync(_commandArgs.FromTitleId, _commandArgs.ToTitleId);
-                await MigrateCatolgItems(_commandArgs.FromTitleId, _commandArgs.ToTitleId);
-                await MigrateStores(_commandArgs.FromTitleId, _commandArgs.ToTitleId, PlayFabService.Settings.StoreList);
-                await MigrateDropTables(_commandArgs.FromTitleId, _commandArgs.ToTitleId);
+                try {
 
-                await Task.Delay(10);
-                Console.ForegroundColor = ConsoleColor.White;
-                Console.WriteLine("\nMigration Completed");
+                    await MigrateTitleData(_commandArgs.FromTitleId, _commandArgs.ToTitleId);
+                    await MigrateInternalTitleData(_commandArgs.FromTitleId, _commandArgs.ToTitleId);
+                    await MigrateCurrencyAsync(_commandArgs.FromTitleId, _commandArgs.ToTitleId);
+                    await MigrateCloudScriptAsync(_commandArgs.FromTitleId, _commandArgs.ToTitleId);
+                    await MigrateCatolgItems(_commandArgs.FromTitleId, _commandArgs.ToTitleId);
+                    await MigrateStores(_commandArgs.FromTitleId, _commandArgs.ToTitleId, PlayFabService.Settings.StoreList);
+                    await MigrateDropTables(_commandArgs.FromTitleId, _commandArgs.ToTitleId);
+
+                    await Task.Delay(10);
+                } catch {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("\nMigration FAILED");
+                    Console.ForegroundColor = ConsoleColor.White;
+                    _state = States.Failed;
+                }
+                if(_state != States.Failed) {
+                    Console.ForegroundColor = ConsoleColor.White;
+                    Console.WriteLine("\nMigration Completed");
+                    _state = States.Complete;
+                }
             });
 
             return false;
@@ -92,6 +98,10 @@ namespace PlayFabPowerTools.Packages
 
         public bool Loop()
         {
+            while(_state == States.Working) {
+
+            }
+            PackageManagerService.SetState(MainPackageStates.Idle);
             return false;
         }
 
